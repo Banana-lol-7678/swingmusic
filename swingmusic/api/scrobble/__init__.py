@@ -57,8 +57,35 @@ class LogTrackBody(TrackHashSchema):
     )
 
 
+class NowPlayingBody(TrackHashSchema):
+    """Body for updating now playing status"""
+    pass
+
+
 def format_date(start: float, end: float):
     return f"{pendulum.from_timestamp(start).format('MMM D, YYYY')} - {pendulum.from_timestamp(end).format('MMM D, YYYY')}"
+
+
+@api.post("/track/nowplaying")
+def update_now_playing(body: NowPlayingBody):
+    """
+    Update the now playing status on Last.fm when a track starts playing.
+    """
+    trackentry = TrackStore.trackhashmap.get(body.trackhash)
+    if trackentry is None:
+        return {"msg": "Track not found."}, 404
+
+    track = trackentry.tracks[0]
+    lastfm = LastFmPlugin()
+
+    if lastfm.enabled:
+        success = lastfm.update_now_playing(track)
+        if success:
+            return {"msg": "Now playing updated"}, 200
+        else:
+            return {"msg": "Failed to update now playing"}, 500
+    else:
+        return {"msg": "Last.fm plugin not enabled"}, 400
 
 
 @api.post("/track/log")

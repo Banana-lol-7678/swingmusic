@@ -18,7 +18,7 @@ from swingmusic.logger import log
 
 class LastFmPlugin(Plugin):
     """
-    Last.fm scrobbler plugin.
+    Last.fm scrobbler plugin with now playing support.
     """
 
     UPLOADING_DUMPS = False
@@ -68,6 +68,53 @@ class LastFmPlugin(Plugin):
         except Exception as e:
             print("get_session_key error", e)
             return None
+
+    @plugin_method
+    @background
+    def update_now_playing(self, track: Track):
+        """
+        Updates the now playing status on Last.fm.
+        This should be called when a track starts playing.
+        """
+        data = {
+            "method": "track.updateNowPlaying",
+            "artist": track.artists[0]["name"],
+            "track": track.title,
+            "album": track.album,
+            "albumArtist": track.albumartists[0]["name"],
+        }
+
+        # Optional: Add duration if available
+        if hasattr(track, 'duration') and track.duration:
+            data["duration"] = str(int(track.duration))
+
+        try:
+            res = self.post(data)
+            res_json = res.json()
+            
+            if res_json.get("error"):
+                log.error(f"LASTFM: now playing error {res_json}")
+                
+                if res_json["error"] == 9:
+                    log.error("LAST.FM: Invalid session key")
+                    # Invalid session key
+                    try:
+                        self.config.lastfmSessionKeys.pop(str(get_current_userid()))
+                    except KeyError:
+                        pass
+                    self.config.lastfmSessionKeys = self.config.lastfmSessionKeys
+                    return False
+            
+            # Check if the now playing update was successful
+            if res_json.get("nowplaying"):
+                log.info(f"LASTFM: Now playing updated for {track.title}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            log.warn(f"Now playing update error: {e}")
+            return False
 
     @plugin_method
     @background
